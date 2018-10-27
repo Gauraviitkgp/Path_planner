@@ -1,0 +1,18 @@
+material vrc/apriltag
+{
+  receive_shadows on
+	technique
+	{
+		pass
+		{
+			
+
+			texture_unit
+			{
+				texture apriltag.png
+				filtering anistropic
+        max_anisotropy 16
+			}
+		}
+	}
+}

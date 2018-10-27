@@ -1,0 +1,10 @@
+<launch>
+    <arg name="robot_name"/>
+    <arg name="init_pose"/>
+    <arg name="ID"/>
+    <!-- icreate robot model -->
+    <node name="create_model" args="$(arg init_pose) -file $(find iarc_px4_gazebo)/sdf/targetbot.sdf -sdf -model $(arg robot_name)" pkg="gazebo_ros" type="spawn_model"/>
+    <node name="bot_controller" pkg="iarc_px4_gazebo" type="groundbot" output="screen" >
+    <param name="robotID" value="$(arg robot_name)"/>
+    </node>  
+</launch>

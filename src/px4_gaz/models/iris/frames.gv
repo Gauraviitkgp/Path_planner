@@ -1,0 +1,7 @@
+digraph G {
+"local_origin" -> "local_origin_ned"[label="Broadcaster: /mavros\nAverage rate: 10000.000 Hz\nMost recent transform: 0.000 ( 886.570 sec old)\nBuffer length: 0.000 sec\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 886.570"[ shape=plaintext ] ;
+ }->"local_origin";
+}

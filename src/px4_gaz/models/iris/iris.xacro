@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+
+<robot name="iris" xmlns:xacro="http://www.ros.org/wiki/xacro">
+	<xacro:include filename="$(find px4_gaz)/models/iris/iris.gazebo" />
+
+	<link name='base_link'></link>
+	
+	<virtual_joint name="fixed_frame" type="fixed" parent_frame="base_link" child_link="base_link" />
+	<link name='/imu_link'></link>
+	<link name='rotor_0'></link>
+	<link name='rotor_1'></link>
+	<link name='rotor_2'></link>
+	<link name='rotor_3'></link>
+	<link name="camera_link"></link>
+	<link name="lidar_link"></link>
+
+	<joint name='lidar_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="lidar_link"/>
+	</joint>
+	<joint name='camera_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="camera_link"/>
+	</joint>
+	<joint name='/imu_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="/imu_link"/>
+	</joint>
+	<joint name='rotor_0_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="rotor_0"/>
+	</joint>
+	<joint name='rotor_1_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="rotor_1"/>
+	</joint>
+	<joint name='rotor_2_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="rotor_2"/>
+	</joint>
+	<joint name='rotor_3_joint' type='continuous'>
+		<parent link="base_link"/>
+		<child link="rotor_3"/>
+	</joint>
+</robot>
