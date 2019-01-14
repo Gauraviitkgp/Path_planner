@@ -31,7 +31,7 @@
     command="$(find xacro)/xacro --inorder '$(find px4_gaz)/models/iris/iris.xacro'" />
 
 
-    <node name="tf_broadcaster" pkg="motion_planning" type="motionplanner.py" respawn="false" >
+    <node name="tf_broadcaster" pkg="motion_planning" type="motionplanner.py" respawn="false">
     </node>
 
 
