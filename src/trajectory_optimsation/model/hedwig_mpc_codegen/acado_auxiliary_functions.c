@@ -60,9 +60,10 @@ void acado_printDifferentialVariables( )
 	int i, j;
 	printf("\nDifferential variables:\n[\n");
 	for (i = 0; i < ACADO_N + 1; ++i)
-	{
+	{	
+		printf("%d",i);
 		for (j = 0; j < ACADO_NX; ++j)
-			printf("\t%e", acadoVariables.x[i * ACADO_NX + j]);
+			printf("\t%f", acadoVariables.x[i * ACADO_NX + j]);
 		printf("\n");
 	}
 	printf("]\n\n");
@@ -75,8 +76,9 @@ void acado_printControlVariables( )
 	printf("\nControl variables:\n[\n");
 	for (i = 0; i < ACADO_N; ++i)
 	{
+		printf("%d",i);
 		for (j = 0; j < ACADO_NU; ++j)
-			printf("\t%e", acadoVariables.u[i * ACADO_NU + j]);
+			printf("\t%f", acadoVariables.u[i * ACADO_NU + j]);
 		printf("\n");
 	}
 	printf("]\n\n");

@@ -92,37 +92,58 @@ public:
 		//px, py, pz, vx, vy, vz, qw, qx, qy, qz; 
 
 
-		for (i = 0; i < NX * (N + 1); ++i) 
-		{ 
-			if(i%NX==6)
-				acadoVariables.x[i]=1;
-			else
-				acadoVariables.x[i]=0;
+		for (i = 0; i < NX * (N + 1); ++i)
+		{
+			acadoVariables.x[ i ] = 0.0; 		//States
+			if (i%NX==6)
+			{
+				acadoVariables.x[ i ] = 1.0;
+		  	}
 		}
-		for (i = 0; i < NU * N; ++i)  acadoVariables.u[ i ] = 0.0;
+		for (i = 0; i < NU * N; ++i)  
+		{
+			acadoVariables.u[ i ] = 1.0;	//Controls
+		}
 
 		/* Initialize the measurements/reference. */
-		for (i = 0; i < NY * N; ++i)
+		// printf("ACADO_NY %d,%d,%d\n",NY,NYN,N );
+		for (i = 0; i < NY * (N+1); ++i)
 		{
-			if(i%NY==6)
-				acadoVariables.y[i]=1;
-			else
-				acadoVariables.y[i]=0;
+			acadoVariables.y[ i ] = 0.0;
+			if (i%NY==6)
+			{
+		  		acadoVariables.y[ i ] = 1.0;
+			}
+			if (i%NY==2)
+			{
+		  		acadoVariables.y[ i ] = 0.0+(float)i/100;
+		  		printf("%d,%f\n", (i-2)/10,acadoVariables.y[ i ]);
+		  	}
 		}
-
-		for (i = 0; i < NYN; ++i)
-		{
-			if(i%NYN==6)
-				acadoVariables.yN[i]=1;
-			else
-				acadoVariables.yN[i]=0;
-		}  
+		// for (i = 0; i < NYN; ++i)  
+		// {
+		// 	acadoVariables.y[ i ] = 0.0;
+		// 	if (i%NY==6)
+		// 	{
+		// 		acadoVariables.y[ i ] = 1.0;
+		// 	}
+		// 	if (i%NY==2)
+		// 	{
+		// 		acadoVariables.y[ i ] = 2.0;
+		// 	}
+		// }
 
 		/* MPC: initialize the current state feedback. */
-		#if ACADO_INITIAL_STATE_FIXED
-			for (i = 0; i < NX; ++i) acadoVariables.x0[ i ] = 0.1;
+		#if 1
+			for (i = 0; i < NX; i++)
+			{ 
+				acadoVariables.x0[ i ] = 0.0; 		//States
+		  		if (i%NX==6)
+		  		{
+		  			acadoVariables.x0[ i ] = 1.0;
+		  		}
+			}
 		#endif
-
 		if( VERBOSE ) acado_printHeader();
 
 	}
@@ -178,7 +199,6 @@ void Find_bot2(const geometry_msgs::TwistStamped::ConstPtr& msg)
 	hvel=msg;
 	FIRST_RUN2=true;
 }	
-
 
 
 int main(int argc, char** argv)
