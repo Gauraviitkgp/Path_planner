@@ -11,7 +11,6 @@ This is a ROS package for Motion planning consisting of two parts:
 if not use https://dev.px4.io/en/ros/mavros_installation.html to install.
 4. 	Automatic Control and Dynamic Optimization(ACADO) installed from http://acado.github.io/install_linux.html
 5.	Qpoases install https://projects.coin-or.org/qpOASES/wiki/QpoasesInstallation
-6.	
 
 ## Steps for first build
 
@@ -80,7 +79,7 @@ Let the reference trajectory(A path which you want the quad to take. Say let, we
 ```
 	y=[positionx_ref, py_r,pz_r, velx_r,vy_r,vz_r,quaternionw_r,qx_r,qy_r,qz_r]
 ```
-Hence, our non linear cost function is https://latex.codecogs.com/gif.latex?\int_{t=0}^{t=t} A_1\times(px-pxr)^2+A_2 \times (py-pyr)^2+\ldots+A_9 \times(qz-qzr)^2 dt
+Hence, our non linear cost function is 
 
 ![equation](https://latex.codecogs.com/gif.latex?%5Cint_%7Bt%3D0%7D%5E%7Bt%3Dt%7D%20A_1%5Ctimes%28px-pxr%29%5E2&plus;A_2%20%5Ctimes%20%28py-pyr%29%5E2&plus;%5Cldots&plus;A_9%20%5Ctimes%28qz-qzr%29%5E2%20dt)
 
@@ -199,7 +198,6 @@ This is a set of portable c++ code generated directory which helps acado interfa
 ```
 Run make to make the testfile.
 
-
 ## Starting MPC
 Run the following commands to run the mpc
 ```
@@ -221,13 +219,16 @@ motion_planning_1 package is the prelimanry version for testing.
 ## Known Issues
 ### ROS
 1.	If you face problems in connecting to mavlink in your pc, you should check that fcu_url is correct. https://dev.px4.io/en/simulation/ros_interface.html
+
 2.	If you face an error in roslaunch 
 ```
 	terminate called after throwing an instance of 'std::runtime_error'
   	what():  Time is out of dual 32-bit range
 ```
 ignore it an run again and again until the gazebo is launched (however if somebody manages to figure out a permanent solution do mail at gauravs123456789@gmail.com or send a PR)
+
 3.	Very low fps in gazebo: Disable the lidar sensor from the gazebo model.
+
 4.	If you're facing to integrate codegen, qpoases and the controller, maybe your CMakeLists.txt in your package may be incorrect and look at the CMakeLists.txt present in this repository.
 
 
@@ -273,7 +274,7 @@ to (Change NY\*N->NY\*(N+1))
 5.	If you're facing problem in integrating ACADO MPC CODEGEN blindly copy the ACADO MPC CODEGEN present in this repository
 
 ### ACADO Changes
-1.	For small 2-3 decimal numbers you can change line number 66 and 81 from %e to %f for better viewing. 
+1.	For small 2-3 decimal numbers you can change line number 66 and 81 in acado_auxiliary_functions.c from %e to %f for better viewing. 
 
 ## New issues
 If you face any issue kindly create a new issue in github and mail me specifically at gauravs123456789@gmail.com 
