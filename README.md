@@ -26,22 +26,32 @@ if not use https://dev.px4.io/en/ros/mavros_installation.html to install.
 
 ### Generating Codegen
 1.	copy /Path_planner/Resources/ACADO_FILES to ~ /ACADOtoolkit/examples/my_example
-2.	``` 
+2.	
+
+``` 
 cd ~/ACADOtoolkit
 make 
 ```
+
 3.	
+
 ```
 cd examples/my_examples
 ./simple_ocp_2.cpp
 ```
 
-4.	```cd ark_mpc``` This folder contains the codegen.
+4.	
+```
+	cd ark_mpc
+``` 
+This folder contains the codegen.
+
 5.	Modify acado_auxilary_functions.c to file in this repository
 6.	Run
+
 ``` 
-make
-./test
+	make
+	./test
 ```
 to test whether code is correct or not
 
