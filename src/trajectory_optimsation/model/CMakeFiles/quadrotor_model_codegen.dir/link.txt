@@ -1,0 +1,1 @@
+/usr/bin/c++    -std=c++0x   CMakeFiles/quadrotor_model_codegen.dir/model.cpp.o  -o quadrotor_model_codegen -rdynamic /home/slytherin/ACADOtoolkit/build/lib/libacado_toolkit_s.so -Wl,-rpath,/home/slytherin/ACADOtoolkit/build/lib 

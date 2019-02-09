@@ -10,10 +10,9 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 find_package(catkin REQUIRED COMPONENTS
 	geometry_msgs
 	gazebo_msgs
-	gazebo_plugins 
+	
 	gazebo_ros
 	message_generation
-	rospy
 	sensor_msgs
 	std_msgs
 	)

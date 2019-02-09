@@ -4,8 +4,8 @@ import numpy as np
 import geometry_msgs.msg
 import mavros_msgs.msg
 from math import sin,cos,isnan
-from laser_to_point import scan_cb
-from sensor_msgs.msg import LaserScan
+# from laser_to_point import scan_cb
+# from sensor_msgs.msg import LaserScan
 import tf
 import roslib
 import time
@@ -59,17 +59,17 @@ class motion:
     def printx(self):
         print "Sent x:",self.cmd.pose.position.x," y:",self.cmd.pose.position.y," z:", self.cmd.pose.position.z
 
-    def laser_output(self,msg):
-        self.pc2_msg,self.point_gen=scan_cb(msg)
-        sum = 0.0
-        num = 0
-        for point in self.point_gen:
-            if not isnan(point[1]) and not isnan(point[0]):
-                print point[0],point[1]
+    # def laser_output(self,msg):
+    #     self.pc2_msg,self.point_gen=scan_cb(msg)
+    #     sum = 0.0
+    #     num = 0
+    #     for point in self.point_gen:
+    #         if not isnan(point[1]) and not isnan(point[0]):
+    #             print point[0],point[1]
         
-        print "Set Over"    
-        # we can calculate the average y value for example
-        # print str(sum/num)
+    #     print "Set Over"    
+    #     # we can calculate the average y value for example
+    #     # print str(sum/num)
 
     def dist(self,p1,p2):
         return math.sqrt((p1[0]-p2[0])^2+(p1[1]-p2[1])^2)
@@ -143,8 +143,8 @@ def talker():
     pub3=rospy.Publisher('/mavros/setpoint_attitude/thrust',mavros_msgs.msg.Thrust,queue_size=1)       
 
     rospy.Subscriber("/mavros/local_position/pose", geometry_msgs.msg.PoseStamped, callback)
-    rospy.Subscriber("/iris/laser/scan",LaserScan, k.laser_output, queue_size=1)    
-    rate = rospy.Rate(10.0)
+    # rospy.Subscriber("/iris/laser/scan",LaserScan, k.laser_output, queue_size=1)    
+    rate = rospy.Rate(100.0)
 
     i=0.0
     goal_reach=True

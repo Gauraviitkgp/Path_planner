@@ -1,17 +1,27 @@
 <launch>
     <!-- MAVROS posix SITL environment launch script -->
-    <arg name="x" default="0"/>
+
+
+    <!-- User defined Do not change -->
+    <arg name="est" default="ekf2"/>
+    <arg name="vehicle" default="iris"/>
+    <arg name="world" default="$(find px4_gaz)/worlds/empty.world"/>
+    <arg name="sdf" default="$(find mavlink_sitl_gazebo)/models/$(arg vehicle)/$(arg vehicle).sdf"/>
+
+    <!-- <param name="robot_description"
+    command="$(find xacro)/xacro inorder '$(find px4_gaz)/models/iris/iris.xacro'" />
+ -->
+   <!--  <node name="tf_broadcaster" pkg="motion_planning" type="motionplanner.py" respawn="false">
+    </node> -->
+    <!--  <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0 0 0 0 1 odom base_link 100" /> -->
+
+    <!-- PX4 defined -->
+      <arg name="x" default="0"/>
     <arg name="y" default="0"/>
     <arg name="z" default="0"/>
     <arg name="R" default="0"/>
     <arg name="P" default="0"/>
     <arg name="Y" default="0"/>
-
-
-    <arg name="est" default="lpe"/>
-    <arg name="vehicle" default="iris"/>
-    <arg name="world" default="$(find px4_gaz)/worlds/empty.world"/>
-    <arg name="sdf" default="$(find px4_gaz)/models/$(arg vehicle)/$(arg vehicle).sdf"/>
 
     <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg vehicle)"/>
 
@@ -27,16 +37,6 @@
     <arg name="pluginlists_yaml" default="$(find mavros)/launch/px4_pluginlists.yaml" />
     <arg name="config_yaml" default="$(find mavros)/launch/px4_config.yaml" />
 
-    <param name="robot_description"
-    command="$(find xacro)/xacro --inorder '$(find px4_gaz)/models/iris/iris.xacro'" />
-
-
-    <node name="tf_broadcaster" pkg="motion_planning" type="motionplanner.py" respawn="false">
-    </node>
-
-
-   <!--  <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0 0 0 0 1 odom base_link 100" /> -->
-    
     <include file="$(find px4)/launch/posix_sitl.launch">
         <arg name="x" value="$(arg x)"/>
         <arg name="y" value="$(arg y)"/>
@@ -63,7 +63,4 @@
         <arg name="pluginlists_yaml" value="$(arg pluginlists_yaml)" />
         <arg name="config_yaml" value="$(arg config_yaml)" />
     </include>
-
 </launch>
-
-<!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->

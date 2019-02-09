@@ -1,0 +1,3 @@
+/home/slytherin/Path_planner/src/trajectory_optimsation/model/CMakeFiles/edit_cache.dir
+/home/slytherin/Path_planner/src/trajectory_optimsation/model/CMakeFiles/rebuild_cache.dir
+/home/slytherin/Path_planner/src/trajectory_optimsation/model/CMakeFiles/quadrotor_model_codegen.dir

@@ -3,14 +3,94 @@ This is a ROS package for Motion planning consisting of two parts:
 1) More important Model Predictive Control
 2) Python implemention to use control inputs for quadrotor movements
 
+## Version Info
+Gazebo: 7.14.0
+ROS Distro: Kinetic
+PX4 firmware Version: 1.7.3
+
+## Starting MPC
+Run the following commands to run the mpc
+```
+	source start.sh
+	roslaunch px4_gaz Simulate.launch
+	commander arm
+	rosrun trajectory_optimsation mpc_controller_node
+	commander mode offboard
+```
+For python script for non-mpc controls testing run
+do
+```
+	source start.sh
+	roslaunch px4_gaz Simulate.launch 
+	commander takeoff
+	rosrun motion_planning motionplanner.py
+```
+motion_planning_1 package is the prelimanry version for testing.
+
+
+
 ## Dependencies Required for installation of package:
 
 1. 	ROS-Gazebo installed
-2.	Pixhawk ROS interface installed in /home/src
-3.	Mavros Mavlink installed in /catkin_ws/src 
-if not use https://dev.px4.io/en/ros/mavros_installation.html to install.
+
+2.	Mavros Mavlink installed in /catkin_ws/src 
+	1.	Install Mavlink from https://mavlink.io/en/getting_started/installation.html
+	2.	Install Mavros from https://dev.px4.io/en/ros/mavros_installation.html
+	3.	Ensure that they are in /catkin_ws
+	*	If they are giving too much problem in installation, just delete your entire OS and reinstall. Just kidding, delete catkin_ws using rm -rf /../catkin_ws and start afresh
+
+3.	Pixhawk ROS interface installed in /home/src do also if there is a different folder please check it throughly. All the source commands have been updated in sim_run.sh
+```
+	cd ~
+	sudo usermod -a -G dialout $USER
+	mkdir src
+	cd src
+	
+	Download https://raw.githubusercontent.com/PX4/Devguide/master/build_scripts/ubuntu_sim.sh
+	source ubuntu_sim.sh
+	
+	git clone https://github.com/PX4/sitl_gazebo.git
+	cd sitl_gazebo
+	git submodule update --init --recursive
+	mkdir build
+	cd build/
+	cmake ..
+	make 
+
+	cd ../..
+
+	git clone https://github.com/Gauraviitkgp/Firmware.git
+	cd Firmware/
+	git checkout v1.7.3
+	make posix_sitl_default gazebo_iris
+
+
+	source ~/src/Firmware/Tools/setup_gazebo.bash ~/src/Firmware/ ~/src/Firmware/build/posix_sitl_default
+	export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:~/src/Firmware/ 
+	export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:~/src/Firmware/Tools/sitl_gazebo 
+	export GAZEBO_MODEL_PATH=~/Path_planner/src/px4_gaz/models:$GAZEBO_MODEL_PATH
+	export GAZEBO_PLUGIN_PATH=${GAZEBO_PLUGIN_PATH}:~/src/sitl_gazebo/Build
+	export GAZEBO_MODEL_PATH=${GAZEBO_MODEL_PATH}:~/src/sitl_gazebo/models
+	export GAZEBO_MODEL_DATABASE_URI=""
+	export SITL_GAZEBO_PATH=~/src/sitl_gazebo
+```
+To check everything is working all right do.
+```
+	roslaunch px4 mavros_posix_sitl.launch
+```
+	1.	https://dev.px4.io/en/setup/dev_env_linux.html
+	2.	https://dev.px4.io/en/simulation/gazebo.html
+	3.	https://dev.px4.io/en/simulation/ros_interface.html	
+
 4. 	Automatic Control and Dynamic Optimization(ACADO) installed from http://acado.github.io/install_linux.html
 5.	Qpoases install https://projects.coin-or.org/qpOASES/wiki/QpoasesInstallation
+6.	If you have gazebo 9 installed and wish for gazebo7 do
+```
+	sudo apt-get purge gazebo9*s
+	sudo apt-get install gazebo7
+	sudo apt-get install ros-kinetic-gazebo-ros
+```
+7.	Eigen 3.3 install http://eigen.tuxfamily.org/index.php?title=Main_Page#Download
 
 ## Steps for first build
 
@@ -186,6 +266,16 @@ Various elements present in initialize are explained as follows
 	acadoVariables.y[i]:	Initialize the reference trajectory
 	acadoVariables.x0[i]:	Initializes the 0th state or state at t=0
 ```
+
+#### Interfacing with PX4 and Mavros
+The commands have been given in setpoint_raw/attitude topic. This takes values and gives it to the quad. For thrust set the scaling parameter present as
+```
+	setpoint_raw:
+  		thrust_scaling: 1      # used in rpyt callback
+```
+in ~ /catkin_ws/src/mavros/mavros/launch/px4_config.yaml to 1(for normal thrust scaling). Its linear in nature
+
+
 #### Acado codegen
 This is a set of portable c++ code generated directory which helps acado interfacing with different languages and softwares(ROS in this Case). Codegen is dependent upon the model you specify.
 ```
@@ -198,25 +288,76 @@ This is a set of portable c++ code generated directory which helps acado interfa
 ```
 Run make to make the testfile.
 
-## Starting MPC
-Run the following commands to run the mpc
-```
-	source start.sh
-	roslaunch px4_gaz Simulate.launch
-	commander takeoff
-	rosrun trajectory_optimsation mpc_controller_node
-```
-For python script for non-mpc controls testing run
-do
-```
-	source start.sh
-	roslaunch px4_gaz Simulate.launch 
-	commander takeoff
-	rosrun motion_planning motionplanner.py
-```
-motion_planning_1 package is the prelimanry version for testing.
 
 ## Known Issues
+### PX4
+1.	Building the PX4 is mentioned above, its completly different from what given in the documentation
+
+2.	Due to changes in build directory of PX4 do check in sim_run.sh that whether 
+```
+	source ~/src/Firmware/Tools/setup_gazebo.bash ~/src/Firmware/ ~/src/Firmware/build_gazebo/
+```
+is at the correct destination or not
+
+3. 	Sometimes you may not recieve the heartbeat of PX4, in that case do
+	* Note that the pixhawk documentation is outdatedto start afresh:
+	
+	1.	First install Tool chain https://dev.px4.io/en/setup/dev_env_linux.html, take care not to install ubuntu_ros_gazebo, it will fuck up your gazebo7 to gazebo9 and your system will be a total crash. 
+	
+	2.	next do 
+
+	```
+		mkdir src
+		cd src
+		git clone https://github.com/PX4/Firmware.git
+		cd Firmware
+		git tag -l
+		git checkout v1.7.4
+	```
+	
+	3.	PX4 says to do make px4_sitl jmavsim but trust me that'll make your life hell do
+	```
+		cmake .
+		make
+		make px4 sitl_gazebo jmavsim
+	```
+	
+	4.	Now jump to https://dev.px4.io/en/simulation/ and you'll realize PX4 has fucked you up here too anyways instead of
+	```
+		make px4_sitl gazebo_plane
+	```
+	do
+	```
+		make px4 sitl_gazebo gazebo_plane
+	```
+	
+	5.	Now lets jump to https://dev.px4.io/en/simulation/gazebo.html. Want to see your quad flying do
+	```
+		make px4 sitl_gazebo gazebo_solo
+	```
+	
+	6.	Next lets go to https://dev.px4.io/en/simulation/ros_interface.html. To check for mavros
+	```
+		roslaunch mavros px4.launch fcu_url:="udp://:14540@127.0.0.1:14557"
+	```
+	Remember that it won't start the gazebo. To run without mavros do
+	```
+		cd <Firmware_clone>
+		make px4_sitl_default gazebo
+		source ~/catkin_ws/devel/setup.bash    // (optional)
+		source Tools/setup_gazebo.bash $(pwd) $(pwd)/build/px4_sitl_default
+		export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$(pwd)
+		export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$(pwd)/Tools/sitl_gazebo
+		roslaunch px4 posix_sitl.launch
+	```
+	the 4th line actually commands the make to build its files to /build/px4_sitl_default but for whatso ever reason that may not happen and it will build in /build_gazebo/ . PX4 guys u'll suffer man. To check everything is working fine, run
+	```
+		roslaunch px4 mavros.launch 
+		roslaunch px4 mavros_posix_sitl.launch 
+	```
+4.	Sometimes UDP ports are incorrectly assigned use lsof -i to check the open UDP ports. Generally we've to change it to 14557 to 14560.
+
+
 ### ROS
 1.	If you face problems in connecting to mavlink in your pc, you should check that fcu_url is correct. https://dev.px4.io/en/simulation/ros_interface.html
 
@@ -225,7 +366,7 @@ motion_planning_1 package is the prelimanry version for testing.
 	terminate called after throwing an instance of 'std::runtime_error'
   	what():  Time is out of dual 32-bit range
 ```
-ignore it an run again and again until the gazebo is launched (however if somebody manages to figure out a permanent solution do mail at gauravs123456789@gmail.com or send a PR)
+rebuild PX4 or check that sourcing has been done correctly
 
 3.	Very low fps in gazebo: Disable the lidar sensor from the gazebo model.
 
