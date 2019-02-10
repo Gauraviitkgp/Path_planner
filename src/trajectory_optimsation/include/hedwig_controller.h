@@ -177,8 +177,10 @@ namespace hedwig_mpc
 	public:
 		geometry_msgs::PoseStamped hstate;
 		geometry_msgs::TwistStamped hvel;
+		sensor_msgs::Imu himu;
 		ros::Time timestamp;
 		float hPosX,hPosY,hPosZ,hOriW,hOriX,hOriY,hOriZ,hVelX,hVelY,hVelZ;
+		float hAccX,hACCY,hACCz;
 
 		hedwig_state(geometry_msgs::PoseStamped hstat, geometry_msgs::TwistStamped velocit)
 		{
@@ -232,29 +234,36 @@ namespace hedwig_mpc
 		bool arm,success,preflightcheck;
 		mavros_msgs::State status;
 
-		bool FIRST_RUN,LIFTOFF=false;
+		bool FIRST_RUN,LIFTOFF=false,got_first_val, got_second_val;
 
 		mavros_msgs::SetMode offb_set_mode;
 		mavros_msgs::SetMode rtl_set_mode;
 		mavros_msgs::CommandBool arm_cmd;
-		hedwig_command HCOMM;
 		mavros_msgs::AttitudeTarget COMMAND;
-
+		hedwig_command HCOMM;
 		ros::ServiceClient set_mode;
 		ros::ServiceClient set_arm;
+		
+		hedwig_state hestate;
 		sensor_msgs::Imu himu;
 
 		ros::Time last_request;
 
+		float vel0,vel1,thr0,thr1;
+
+		float M,C; //thr=vel*M+C;
+
 		hthnatt_estimator()
 		{
-			success=false;FIRST_RUN=true;preflightcheck=false;
+			success=false;FIRST_RUN=true;preflightcheck=false;got_first_val=false;got_second_val=false;
 			offb_set_mode.request.custom_mode = "OFFBOARD";
 			rtl_set_mode.request.custom_mode = "AUTO.RTL";
 			last_request = ros::Time::now();
 			COMMAND.header.frame_id="";
 			HCOMM.zero();
 		}
+
+	
 
 		void init()
 		{
@@ -337,6 +346,167 @@ namespace hedwig_mpc
 				cout<<"\n===========================================\nINITIALIZING ESTIMATOR\n===========================================\n";
 			}
 		}
+
+		void calcfirst()
+		{
+			static int k=0;
+			int flag=0;
+
+			if(k==0)
+			{
+				cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
+				if(set_mode.call(offb_set_mode))
+			 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
+			 	else
+			 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
+
+			 	cout<<"\n\033[1;34mPowering up Quad\033[0m"<<endl;
+			 	cout<<"\033[0;34mIncreasing thrust by 0.05 in every 1 second\033[0m"<<endl;
+			 	k=1;
+			}
+			
+			if((ros::Time::now() - last_request > ros::Duration(1)))
+			{
+				cout<<"\033[0;34mChecking Liftoff\033[0m"<<endl;
+				cout<<"\t\033[0;33mLinear Z velocity value is \033[0m"<<hestate.hVelZ<<endl;
+				if(hestate.hVelZ>=0.1 || LIFTOFF==true )
+				{
+					if(hestate.hPosZ<50)
+					{
+						cout<<"\t\t\033[1;32mLiftoff Detected\033[0m"<<endl;
+						cout<<"\t\tThrust Value is "<<HCOMM.get_thrust()<<endl;
+
+						COMMAND.thrust=HCOMM.get_thrust();
+						COMMAND.body_rate=HCOMM.get_bodyrates();
+						COMMAND.orientation=HCOMM.get_orientation();
+						last_request = ros::Time::now();
+						LIFTOFF=true;
+					}
+					else
+					{
+						vel0=hestate.hVelZ;
+						thr0=HCOMM.get_thrust();
+						cout<<"\033[0;31mHeight has gone above 50 m, Proceeding to land\033[0m"<<endl;
+						if((status.mode).compare("AUTO.RTL")!=0 && set_mode.call(rtl_set_mode))
+			 				cout<<"\033[0;32mRTL Enabled\033[0m"<<endl;
+			 			
+
+			 			cout<<"\n\033[1;32mStored the first values Vel0:"<<vel0<<" thr0:"<<thr0<<"\033[0m"<<endl;
+						cout<<"Proceeding for next step\n";
+						cout<<"\nStoring into LOG FILE"<<endl;
+						cout<<"Restarting pre-flight checks"<<endl;
+
+						preflightcheck=false;
+						FIRST_RUN=false;
+						got_first_val=true;
+						LIFTOFF==false;
+						HCOMM.zero();
+
+						last_request = ros::Time::now();
+	
+				 	}
+
+				}
+				else
+				{
+					cout<<"\t\033[0;32mNo Liftoff Deteced Increasing thrust\033[0m"<<endl;
+					HCOMM.hthrust+=0.05;
+					cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
+
+					COMMAND.thrust=HCOMM.get_thrust();
+					COMMAND.body_rate=HCOMM.get_bodyrates();
+					COMMAND.orientation=HCOMM.get_orientation();
+					last_request = ros::Time::now();
+				}
+
+			}
+		}
+
+		void calcmc()
+		{
+			// (thr-thr0)=(vel-vel0)(thr1-thr0)/(vel1-vel0)
+			float temp= (thr1-thr0)/(vel1-vel0);
+			M=temp;
+			C=-vel0*temp+thr0;
+			cout<<"\nFor hover velocity we need to set thrust to: "<<C;
+			HCOMM.zero();
+			HCOMM.hthrust=C;
+
+			COMMAND.thrust=HCOMM.get_thrust();
+			COMMAND.body_rate=HCOMM.get_bodyrates();
+			COMMAND.orientation=HCOMM.get_orientation();
+			last_request = ros::Time::now();
+		}
+
+		void calcsecond()
+		{
+			static int k=0;
+			int flag=0;
+			if(k==0)
+			{
+				cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
+				if(set_mode.call(offb_set_mode))
+			 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
+			 	else
+			 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
+
+			 	cout<<"\n\033[1;34mPowering up Quad\033[0m"<<endl;
+			 	cout<<"\033[0;34mSetting the thrust Value as "<<thr0-0.05/2<<"\033[0m"<<endl;
+			 	HCOMM.hthrust+=thr0-0.05/2;
+			 	k=1;
+			}
+			
+			if((ros::Time::now() - last_request > ros::Duration(1)))
+			{
+				cout<<"\033[0;34mChecking Liftoff\033[0m"<<endl;
+				cout<<"\t\033[0;33mLinear Z velocity value is \033[0m"<<hestate.hVelZ<<endl;
+				if(hestate.hVelZ>=0.1 || LIFTOFF==true )
+				{
+					if(hestate.hPosZ<20)
+					{
+						cout<<"\t\t\033[1;32mLiftoff Detected\033[0m"<<endl;
+						cout<<"\t\tThrust Value is "<<HCOMM.get_thrust()<<endl;
+
+						COMMAND.thrust=HCOMM.get_thrust();
+						COMMAND.body_rate=HCOMM.get_bodyrates();
+						COMMAND.orientation=HCOMM.get_orientation();
+						last_request = ros::Time::now();
+						LIFTOFF=true;
+					}
+					else
+					{
+						vel1=hestate.hVelZ;
+						thr1=HCOMM.get_thrust();
+						cout<<"\033[0;31mHeight has gone above 20 m, Proceeding to Hover"<<endl;
+			 				cout<<"\033[0;32mRTL Enabled\033[0m"<<endl;
+			 			
+
+			 			cout<<"\n\033[1;32mStored the second values Vel1:"<<vel1<<" thr1:"<<thr1<<"\033[0m"<<endl;
+						cout<<"Calculating hover values\n";
+						cout<<"\nStoring into LOG FILE"<<endl;
+						this->calcmc();
+						got_second_val=true;
+						last_request = ros::Time::now();
+
+				 	}
+
+				}
+				else
+				{
+					cout<<"\t\033[0;32mNo Liftoff Deteced Increasing thrust\033[0m"<<endl;
+					HCOMM.hthrust+=0.01;
+					cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
+
+					COMMAND.thrust=HCOMM.get_thrust();
+					COMMAND.body_rate=HCOMM.get_bodyrates();
+					COMMAND.orientation=HCOMM.get_orientation();
+					last_request = ros::Time::now();
+				}
+
+			}
+		}
+
+
 		void estimatecm()
 		{
 			
@@ -352,54 +522,12 @@ namespace hedwig_mpc
 			}
 
 			
+			if(status.armed==true && got_first_val==false)
+				this->calcfirst();
+			
+			if(status.armed==true && got_first_val==true && got_second_val==false)
+				this->calcsecond();
 
-			if(status.armed==true)
-			{
-				static int k=0;
-				if(k==0)
-				{
-					cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
-					if(set_mode.call(offb_set_mode))
-				 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
-				 	else
-				 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
-
-				 	cout<<"\nPowering up Quad"<<endl;
-				 	cout<<"Increasing thrust by 0.05 in every 1 second"<<endl;
-				 	k=1;
-				}
-				
-				if((ros::Time::now() - last_request > ros::Duration(1)))
-				{
-					cout<<"\tChecking Liftoff"<<endl;
-					cout<<"\tLinear Z accelaration value is "<<himu.linear_acceleration.z<<endl;
-					if(himu.linear_acceleration.z>=10 || LIFTOFF==true)
-					{
-						cout<<"\tLiftoff Detected"<<endl;
-						cout<<"\tThrust Value is "<<HCOMM.get_thrust()<<endl;
-
-						COMMAND.thrust=HCOMM.get_thrust();
-						COMMAND.body_rate=HCOMM.get_bodyrates();
-						COMMAND.orientation=HCOMM.get_orientation();
-						last_request = ros::Time::now();
-						LIFTOFF=true;
-					}
-					else
-					{
-						cout<<"\tNo Liftoff Deteced Increasing thrust";
-						HCOMM.hthrust+=0.05;
-						cout<<"\tSetting thrust to "<<HCOMM.get_thrust()<<endl;
-
-						COMMAND.thrust=HCOMM.get_thrust();
-						COMMAND.body_rate=HCOMM.get_bodyrates();
-						COMMAND.orientation=HCOMM.get_orientation();
-						last_request = ros::Time::now();
-					}
-
-
-				}
-
-			}
 
 		}
 	};

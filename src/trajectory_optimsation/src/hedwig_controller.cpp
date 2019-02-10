@@ -352,12 +352,14 @@ int main(int argc, char** argv)
 
 	htrajectory HTraj;
 	hthnatt_estimator HESTIMATOR;
-
+	hedwig_state HESTATE; //Hedwig Estimator State
 
 	while (ros::ok())
 	{
 		if(FIRST_RUN1 && FIRST_RUN2 && HESTIMATOR.success==false)
 		{
+			HESTATE.set_state(*hpos,*hvel);
+			HESTIMATOR.hestate=HESTATE;
 			HESTIMATOR.status=*hstatus;
 			HESTIMATOR.himu=*himu;
 			HESTIMATOR.set_mode=set_mode_client;
