@@ -1,7 +1,4 @@
-#include <thread>
 #include <iostream>
-#include <Eigen/Eigen>
-#include <Eigen/Dense>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/TwistStamped.h>
@@ -11,16 +8,16 @@
 #include <mavros_msgs/AttitudeTarget.h>
 #include <ros/ros.h>
 #include <std_msgs/Bool.h>
-#include <list>
 #include <ros/ros.h>
 #include "mavros_msgs/State.h"
 #include "sensor_msgs/Imu.h"
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <string>
-
+#include <cmath>
 
 #include "geometry_eigen_conversions.h"
+
 
 using std::list;
 using namespace std;
@@ -231,11 +228,14 @@ namespace hedwig_mpc
 	class hthnatt_estimator
 	{
 	public:
-		bool arm,success,preflightcheck;
+		bool arm,success;
 		mavros_msgs::State status;
 
-		bool FIRST_RUN,LIFTOFF=false,got_first_val, got_second_val;
+		bool first_run,LIFTOFF=false,got_first_val, got_second_val, got_5_val;
 
+		//Parameter for Total number of values
+		#define TOTAL 5
+		
 		mavros_msgs::SetMode offb_set_mode;
 		mavros_msgs::SetMode rtl_set_mode;
 		mavros_msgs::CommandBool arm_cmd;
@@ -249,13 +249,35 @@ namespace hedwig_mpc
 
 		ros::Time last_request;
 
-		float vel0,vel1,thr0,thr1;
+		
+		bool HOVER,PREFLIGHTCHECKED;
+
+		float velz_values[TOTAL], th_values[TOTAL]; 
 
 		float M,C; //thr=vel*M+C;
+		bool achevied=false;
+
+		//Parameters For PID
+		float Kp;
+		float Ki;
+		float Kd;
+		float delT;//Fine Parameter
 
 		hthnatt_estimator()
 		{
-			success=false;FIRST_RUN=true;preflightcheck=false;got_first_val=false;got_second_val=false;
+			//Parameters
+			PREFLIGHTCHECKED=false; //true for avoiding Pre-flight checks, false for not
+			HOVER=true;
+			M=0.01276;
+			C=0.561566;
+			delT=0.25;
+			Kp=0.007500;
+			Ki=0.000000;
+			Kd=0.014036;
+			// TOTAL=5;
+
+			success=false;first_run=true;got_first_val=false;got_second_val=false;got_5_val=false;
+			
 			offb_set_mode.request.custom_mode = "OFFBOARD";
 			rtl_set_mode.request.custom_mode = "AUTO.RTL";
 			last_request = ros::Time::now();
@@ -264,11 +286,10 @@ namespace hedwig_mpc
 		}
 
 	
-
 		void init()
 		{
 			
-			if(FIRST_RUN)
+			if(first_run)
 			{
 				cout<<"\n===========================================\nINITIALIZING THROTTLE AND ATTITUDE ESTIMATOR\n===========================================\n";
 				ros::Duration(0.5).sleep();
@@ -323,7 +344,7 @@ namespace hedwig_mpc
 					cout<<"\033[1;32mLand check passed\033[1m\n";
 				}
 			}
-			FIRST_RUN=false;
+			first_run=false;
 
 			if(status.guided==false)
 			{
@@ -340,10 +361,122 @@ namespace hedwig_mpc
 			else
 			{
 				cout<<"\n\033[1;32mAll Pre-flight test Passed Proceeding for next step\033[0m\n";
-				preflightcheck=true;
+				PREFLIGHTCHECKED=true;
 				ros::Duration(0.5).sleep();
 
 				cout<<"\n===========================================\nINITIALIZING ESTIMATOR\n===========================================\n";
+			}
+		}
+
+		void initilize_step()
+		{
+			cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
+			if(set_mode.call(offb_set_mode))
+		 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
+		 	else
+		 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
+
+		 	cout<<"\n\033[1;34mPowering up Quad\033[0m"<<endl;
+		}
+
+		bool timeelapse(float k)
+		{
+			if(ros::Time::now() - last_request > ros::Duration(k))
+				return true;
+			else
+				return false;
+		}
+
+		void calcmc()
+		{
+			// (thr-th_values[0])=(vel-velz_values[0])(th_values[1]-th_values[0])/(velz_values[1]-velz_values[0])
+			float temp= (th_values[1]-th_values[0])/(velz_values[1]-velz_values[0]);
+			M=temp;
+			C=-velz_values[0]*temp+th_values[0];
+			cout<<"\nFor hover velocity we need to set thrust to: "<<C;
+			HCOMM.zero();
+			HCOMM.hthrust=C;
+
+			this->updatecommand();
+			last_request = ros::Time::now();
+		}
+
+		void updatecommand()
+		{
+			COMMAND.thrust=HCOMM.get_thrust();
+			COMMAND.body_rate=HCOMM.get_bodyrates();
+			COMMAND.orientation=HCOMM.get_orientation();
+		}
+
+		void linearfit()
+		{
+			int i,j,k,n;
+		    n=TOTAL;
+
+		    float a,b;
+		    
+		    float xsum=0,x2sum=0,ysum=0,xysum=0;                //variables for sums/sigma of xi,yi,xi^2,xiyi etc
+		    for (i=0;i<TOTAL;i++)
+		    {
+		        xsum=xsum+th_values[i];                        //calculate sigma(xi)
+		        ysum=ysum+velz_values[i];                        //calculate sigma(yi)
+		        x2sum=x2sum+pow(th_values[i],2);                //calculate sigma(x^2i)
+		        xysum=xysum+th_values[i]*velz_values[i];                    //calculate sigma(xi*yi)
+		    }
+		    
+		    a=(n*xysum-xsum*ysum)/(n*x2sum-xsum*xsum);            //calculate slope
+		    b=(x2sum*ysum-xsum*xysum)/(x2sum*n-xsum*xsum);            //calculate intercept
+		    
+		    float y_fit[TOTAL];                        //an array to store the new fitted values of y    
+		    for (i=0;i<n;i++)
+		        y_fit[i]=a*th_values[i]+b;                    //to calculate y(fitted) at given x points
+		    
+		    cout<<"S.no"<<setw(5)<<"thr"<<setw(19)<<"velz(observed)"<<setw(19)<<"velz(fitted)"<<endl;
+		    cout<<"-----------------------------------------------------------------\n";
+		    for (i=0;i<n;i++)
+		        cout<<i+1<<"."<<setw(8)<<th_values[i]<<setw(15)<<velz_values[i]<<setw(18)<<y_fit[i]<<endl;//print a table of x,y(obs.) and y(fit.)    
+		    cout<<"\n\033[1;34mThe linear fit line is of the form:\033[0m\n\n"<<1/a<<" \033[0;33mvelz_values\033[0m + "<<-b/a<<endl;        //print the best fit line
+		    M=1/a;
+		    C=-b/a;
+		}
+
+		void hover_command()
+		{
+			
+			static float error_sum=0;
+			static float prev_error=0;
+			static float error;
+			static float SET=0;
+
+			static int k=0;
+			if(k==0)
+			{
+				HCOMM.hthrust=C;
+				this->updatecommand();
+	
+			}
+
+			if (timeelapse(delT))
+			{
+				// if(k%12==0)
+				// 	SET=0;
+				cout<<"\033[1;32mZ velocity is:\033[0m"<<hestate.hVelZ<<endl;
+				cout<<"\t\033[1;33mThrust values is:\033[0m"<<HCOMM.get_thrust()<<endl;
+				
+				cout<<"\t\033[1;35mThrust Desired is:\033[0m"<<SET<<endl;
+				error=(SET-hestate.hVelZ);
+				error_sum+=error;
+				cout<<"\t\t\033[1;31merror:\033[0m"<<error<<"\t\033[1;32mP:\033[0m"<<error*Kp<<"\t\033[1;33mI:\033[0m"<<error_sum*delT*Ki<<"\t\033[1;34mD:\033[0m"<<(error-prev_error)/delT*Kd<<endl;
+
+				HCOMM.hthrust+=error*Kp+error_sum*delT*Ki+(error-prev_error)/delT*Kd;
+
+				prev_error=error;
+				
+				cout<<endl;
+
+				this->updatecommand();
+				k++;
+				last_request = ros::Time::now();
 			}
 		}
 
@@ -354,18 +487,12 @@ namespace hedwig_mpc
 
 			if(k==0)
 			{
-				cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
-				if(set_mode.call(offb_set_mode))
-			 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
-			 	else
-			 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
-
-			 	cout<<"\n\033[1;34mPowering up Quad\033[0m"<<endl;
+				this->initilize_step();
 			 	cout<<"\033[0;34mIncreasing thrust by 0.05 in every 1 second\033[0m"<<endl;
 			 	k=1;
 			}
 			
-			if((ros::Time::now() - last_request > ros::Duration(1)))
+			if(timeelapse(1))
 			{
 				cout<<"\033[0;34mChecking Liftoff\033[0m"<<endl;
 				cout<<"\t\033[0;33mLinear Z velocity value is \033[0m"<<hestate.hVelZ<<endl;
@@ -376,28 +503,26 @@ namespace hedwig_mpc
 						cout<<"\t\t\033[1;32mLiftoff Detected\033[0m"<<endl;
 						cout<<"\t\tThrust Value is "<<HCOMM.get_thrust()<<endl;
 
-						COMMAND.thrust=HCOMM.get_thrust();
-						COMMAND.body_rate=HCOMM.get_bodyrates();
-						COMMAND.orientation=HCOMM.get_orientation();
+						this->updatecommand();
 						last_request = ros::Time::now();
 						LIFTOFF=true;
 					}
 					else
 					{
-						vel0=hestate.hVelZ;
-						thr0=HCOMM.get_thrust();
+						velz_values[0]=hestate.hVelZ;
+						th_values[0]=HCOMM.get_thrust();
+
 						cout<<"\033[0;31mHeight has gone above 50 m, Proceeding to land\033[0m"<<endl;
 						if((status.mode).compare("AUTO.RTL")!=0 && set_mode.call(rtl_set_mode))
 			 				cout<<"\033[0;32mRTL Enabled\033[0m"<<endl;
 			 			
-
-			 			cout<<"\n\033[1;32mStored the first values Vel0:"<<vel0<<" thr0:"<<thr0<<"\033[0m"<<endl;
+			 			cout<<"\n\033[1;32mStored the first values velz_values[0]:"<<velz_values[0]<<" th_values[0]:"<<th_values[0]<<"\033[0m"<<endl;
 						cout<<"Proceeding for next step\n";
 						cout<<"\nStoring into LOG FILE"<<endl;
 						cout<<"Restarting pre-flight checks"<<endl;
 
-						preflightcheck=false;
-						FIRST_RUN=false;
+						PREFLIGHTCHECKED=false;
+						first_run=false;
 						got_first_val=true;
 						LIFTOFF==false;
 						HCOMM.zero();
@@ -413,29 +538,11 @@ namespace hedwig_mpc
 					HCOMM.hthrust+=0.05;
 					cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
 
-					COMMAND.thrust=HCOMM.get_thrust();
-					COMMAND.body_rate=HCOMM.get_bodyrates();
-					COMMAND.orientation=HCOMM.get_orientation();
+					this->updatecommand();
 					last_request = ros::Time::now();
 				}
 
 			}
-		}
-
-		void calcmc()
-		{
-			// (thr-thr0)=(vel-vel0)(thr1-thr0)/(vel1-vel0)
-			float temp= (thr1-thr0)/(vel1-vel0);
-			M=temp;
-			C=-vel0*temp+thr0;
-			cout<<"\nFor hover velocity we need to set thrust to: "<<C;
-			HCOMM.zero();
-			HCOMM.hthrust=C;
-
-			COMMAND.thrust=HCOMM.get_thrust();
-			COMMAND.body_rate=HCOMM.get_bodyrates();
-			COMMAND.orientation=HCOMM.get_orientation();
-			last_request = ros::Time::now();
 		}
 
 		void calcsecond()
@@ -451,12 +558,12 @@ namespace hedwig_mpc
 			 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
 
 			 	cout<<"\n\033[1;34mPowering up Quad\033[0m"<<endl;
-			 	cout<<"\033[0;34mSetting the thrust Value as "<<thr0-0.05/2<<"\033[0m"<<endl;
-			 	HCOMM.hthrust+=thr0-0.05/2;
+			 	cout<<"\033[0;34mSetting the thrust Value as "<<th_values[0]-0.05/2<<"\033[0m"<<endl;
+			 	HCOMM.hthrust+=th_values[0]-0.05/2;
 			 	k=1;
 			}
 			
-			if((ros::Time::now() - last_request > ros::Duration(1)))
+			if((timeelapse(1)))
 			{
 				cout<<"\033[0;34mChecking Liftoff\033[0m"<<endl;
 				cout<<"\t\033[0;33mLinear Z velocity value is \033[0m"<<hestate.hVelZ<<endl;
@@ -467,21 +574,19 @@ namespace hedwig_mpc
 						cout<<"\t\t\033[1;32mLiftoff Detected\033[0m"<<endl;
 						cout<<"\t\tThrust Value is "<<HCOMM.get_thrust()<<endl;
 
-						COMMAND.thrust=HCOMM.get_thrust();
-						COMMAND.body_rate=HCOMM.get_bodyrates();
-						COMMAND.orientation=HCOMM.get_orientation();
+						this->updatecommand();
 						last_request = ros::Time::now();
 						LIFTOFF=true;
 					}
 					else
 					{
-						vel1=hestate.hVelZ;
-						thr1=HCOMM.get_thrust();
+						velz_values[1]=hestate.hVelZ;
+						th_values[1]=HCOMM.get_thrust();
 						cout<<"\033[0;31mHeight has gone above 20 m, Proceeding to Hover"<<endl;
 			 				cout<<"\033[0;32mRTL Enabled\033[0m"<<endl;
 			 			
 
-			 			cout<<"\n\033[1;32mStored the second values Vel1:"<<vel1<<" thr1:"<<thr1<<"\033[0m"<<endl;
+			 			cout<<"\n\033[1;32mStored the second values Velz_values[1]:"<<velz_values[1]<<" th_values[1]:"<<th_values[1]<<"\033[0m"<<endl;
 						cout<<"Calculating hover values\n";
 						cout<<"\nStoring into LOG FILE"<<endl;
 						this->calcmc();
@@ -497,20 +602,147 @@ namespace hedwig_mpc
 					HCOMM.hthrust+=0.01;
 					cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
 
-					COMMAND.thrust=HCOMM.get_thrust();
-					COMMAND.body_rate=HCOMM.get_bodyrates();
-					COMMAND.orientation=HCOMM.get_orientation();
+					this->updatecommand();
 					last_request = ros::Time::now();
 				}
 
 			}
 		}
 
+		void continous()
+		{
+			static int k=0, counter=0;
+			static float prev_z;
+			static bool LIFT=false, LIFT2=false;
+
+			int flag=0;
+			//Setting initial Mode
+			if(k==0)
+			{
+				this->initilize_step();
+			 	cout<<"\033[0;34mIncreasing thrust by 0.05 in every 1 second\033[0m"<<endl;
+			 	k=1;
+			}
+
+			//Setup of Increasing velocity
+			if(!LIFT&&timeelapse(1))
+			{
+				cout<<"\033[0;34mChecking Liftoff\033[0m"<<endl;
+				cout<<"\t\033[0;33mLinear Z velocity value is \033[0m"<<hestate.hVelZ<<endl;
+				
+				if(hestate.hVelZ<=0.1) //Check if liftoff is not done
+				{
+
+					cout<<"\t\033[0;31mNo Liftoff Detected Increasing thrust\033[0m"<<endl;
+					HCOMM.hthrust+=0.05; //Increasing thrust.
+					cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
+
+					this->updatecommand();
+					last_request = ros::Time::now();
+				}
+				else //If liftoff is detected
+				{
+					cout<<"\t\033[1;32mLiftoff Detected\033[0m"<<endl;
+					cout<<"\t\t\033[1;33mThrust Value is \033[0m"<<HCOMM.get_thrust()<<endl;
+					cout<<"\t\t\033[0;35mDecreasing thrust and fine tuning\033[0m"<<endl;
+					
+					HCOMM.hthrust-=0.05;
+					this->updatecommand();
+					last_request = ros::Time::now()+ros::Duration(10);
+
+					LIFT=true;
+				}
+			}
+
+
+
+			if(LIFT&&timeelapse(0.25))
+			{
+				if(!LIFT2&& timeelapse(3))//Check if liftoff is not done
+				{
+					if(hestate.hVelZ<=0.1)
+					{
+						cout<<"\t\033[0;31mNo Liftoff Detected Increasing thrust by 0.0025\033[0m"<<endl;
+						HCOMM.hthrust+=0.0025; //Increasing thrust.
+						cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
+
+						this->updatecommand();
+						last_request = ros::Time::now();
+					}
+					else
+					{
+						cout<<"\t\033[1;32mFirst Liftoff Detected\033[0m"<<endl;
+						cout<<"\t\t\033[1;33mThrust Value is \033[0m"<<HCOMM.get_thrust()<<endl;
+
+						// HCOMM.hthrust+=0.0025; //Increasing thrust.
+						// cout<<"\t\t\033[1;33mSetting thrust to \033[0m"<<HCOMM.get_thrust()<<endl;
+
+						// this->updatecommand();
+						last_request = ros::Time::now();
+						LIFT2=true;
+					}
+				}
+				if(LIFT2)
+				{
+					if(hestate.hVelZ>0.1 && hestate.hVelZ-prev_z>0.0)//If liftoff detected still climbing
+					{
+						prev_z=hestate.hVelZ;
+						last_request = ros::Time::now();
+					} 
+					else if(hestate.hVelZ>0.1 && hestate.hVelZ-prev_z<=0.0)// If stablized
+					{
+						cout<<"\t\033[1;32mStoring Values\033[0m"<<endl;
+						cout<<"\t\t\033[1;33mThrust Value is \033[0m"<<HCOMM.get_thrust()<<endl;
+						cout<<"\t\t\033[1;35mVelocity Value is \033[0m"<<hestate.hVelZ<<endl;
+						cout<<"\t\t\t\033[0;33mIncreasing thrust by 0.025 for next value\033[0m"<<endl;
+
+						velz_values[counter]=hestate.hVelZ;
+						th_values[counter++]=HCOMM.get_thrust();
+
+						if(counter==TOTAL)
+						{
+							got_5_val=true;
+
+							for (int i = 0; i < counter; i++)
+				 				cout<<"\033[1;32mStored the "<< i<<"th value Vel"<<i<<":"<<velz_values[i]<<" thr"<<i<<":"<<th_values[i]<<"\033[0m"<<endl;
+							
+				 			this->linearfit();
+
+							if(!HOVER)
+							{
+								cout<<"\033[0;31mGot 5 Values, Proceeding to land\033[0m"<<endl;
+								if((status.mode).compare("AUTO.RTL")!=0 && set_mode.call(rtl_set_mode))
+					 				cout<<"\033[0;32mRTL Enabled\033[0m"<<endl;
+					 			
+					 			cout<<endl;
+								HCOMM.zero();
+								this->updatecommand();
+							}
+				 			else
+				 			{
+								cout<<"\033[0;31mGot 5 Values, Proceeding to hover\033[0m"<<endl;
+								HCOMM.hthrust=C;
+								this->updatecommand();
+							}
+
+
+							last_request = ros::Time::now()+ros::Duration(7);
+						}
+						else
+						{
+							HCOMM.hthrust+=0.0025;
+							COMMAND.thrust=HCOMM.get_thrust();
+							last_request = ros::Time::now();
+							LIFT=true;
+						}							
+					}
+				}
+			}
+		}
 
 		void estimatecm()
 		{
-			
-			if(status.armed==false&&(ros::Time::now() - last_request > ros::Duration(3)))
+			if(status.armed==false&&(timeelapse(3)))
 			{
 				cout<<"\033[1;34mTrying to arm the drone\033[0m\n";
 				arm_cmd.request.value = true;
@@ -518,15 +750,32 @@ namespace hedwig_mpc
 				{
                     cout<<"\t\033[0;32mQuad Armed success\033[0m\n";
                 }
+                cout<<"\033[1;34mSetting Mode to offboard\033[0m\n";
+				if(set_mode.call(offb_set_mode))
+			 		cout<<"\t\033[0;32mOffboard Enabled\033[0m"<<endl;
+			 	else
+			 		cout<<"\t\033[0;31mNot able to send commands\033[0m"<<endl;
+
                 last_request = ros::Time::now();
 			}
 
-			
-			if(status.armed==true && got_first_val==false)
+			#if 0
+				if(status.armed==true && got_first_val==false)
 				this->calcfirst();
 			
-			if(status.armed==true && got_first_val==true && got_second_val==false)
+				if(status.armed==true && got_first_val==true && got_second_val==false)
 				this->calcsecond();
+			#endif
+
+			#if 1
+				if(status.armed==true && got_5_val==false)
+					this->continous();
+			#endif
+
+
+			if(HOVER==true&&got_5_val==true)
+				this->hover_command();
+
 
 
 		}

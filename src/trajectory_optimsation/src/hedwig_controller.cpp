@@ -365,9 +365,9 @@ int main(int argc, char** argv)
 			HESTIMATOR.set_mode=set_mode_client;
 			HESTIMATOR.set_arm= arming_client;
 
-			if(HESTIMATOR.preflightcheck==false)
+			if(HESTIMATOR.PREFLIGHTCHECKED==false)
 				HESTIMATOR.init();
-			if(HESTIMATOR.preflightcheck==true)
+			if(HESTIMATOR.PREFLIGHTCHECKED==true)
 			{
 				HESTIMATOR.estimatecm();
 				pub_controls.publish(HESTIMATOR.COMMAND);
